@@ -1,74 +1,82 @@
-// lab02-context-isolation.js
 const puppeteer = require('puppeteer');
+const express = require('express');
+const cookieParser = require('cookie-parser');
 
-// Toggle this to false for local visual debugging, true for production runs
-const HEADLESS_MODE = true;
-
-// Detect if running in a container/CI environment as root — common cause of
-// sandbox launch failures. Adjust this check based on your actual CI setup.
+const HEADLESS_MODE = false;
 const RUNNING_AS_ROOT_CONTAINER =
   process.env.CI === 'true' ||
   process.env.DOCKER_CONTAINER === 'true' ||
   (typeof process.getuid === 'function' && process.getuid() === 0);
 
-(async () => {
-  let browser;
+// --- Local test server: sets + shows cookies ---
+function startServer(port) {
+  const app = express();
+  app.use(cookieParser());
+  app.get('/set-cookie', (req, res) => {
+    res.cookie('session', req.query.session, { httpOnly: false });
+    res.send(`Cookie set: ${req.query.session}`);
+  });
+  app.get('/show-cookies', (req, res) => {
+    res.send(`Cookies seen: ${JSON.stringify(req.cookies)}`);
+  });
+  return new Promise((resolve) => {
+    const server = app.listen(port, () => resolve(server));
+  });
+}
 
+(async () => {
+  let browser, server;
+  const PORT = 4000;
   try {
+    server = await startServer(PORT);
+    console.log(`[INFO] Local test server up on :${PORT}`);
+
     console.log('[INFO] Launching browser...');
+    const launchArgs = ['--start-maximized'];
+    if (RUNNING_AS_ROOT_CONTAINER) {
+      console.log('[INFO] Root/container detected — adding --no-sandbox.');
+      launchArgs.push('--no-sandbox', '--disable-setuid-sandbox');
+    }
     browser = await puppeteer.launch({
-      headless: false,
+      headless: HEADLESS_MODE,
       defaultViewport: null,
-      args: ['--start-maximized']
+      args: launchArgs
     });
 
-    // --- SESSION A: isolated context ---
+    // SESSION A
     console.log('[INFO] Creating isolated context for Session A...');
     const contextA = await browser.createBrowserContext();
     const pageA = await contextA.newPage();
-
-    await pageA.goto('https://httpbin.org/cookies/set?session=UserA-Session', {
-      waitUntil: 'networkidle2'
-    });
+    await pageA.goto(`http://localhost:${PORT}/set-cookie?session=UserA-Session`, { waitUntil: 'networkidle2' });
     console.log('[INFO] Session A cookie set.');
 
-    // --- SESSION B: separate isolated context ---
+    // SESSION B
     console.log('[INFO] Creating isolated context for Session B...');
     const contextB = await browser.createBrowserContext();
     const pageB = await contextB.newPage();
-
-    await pageB.goto('https://httpbin.org/cookies/set?session=UserB-Session', {
-      waitUntil: 'networkidle2'
-    });
+    await pageB.goto(`http://localhost:${PORT}/set-cookie?session=UserB-Session`, { waitUntil: 'networkidle2' });
     console.log('[INFO] Session B cookie set.');
 
-    // --- VERIFY ISOLATION ---
-    // Navigate each page to the cookie-viewer endpoint and capture what each session sees
-    await pageA.goto('https://httpbin.org/cookies', { waitUntil: 'networkidle2' });
-    await pageB.goto('https://httpbin.org/cookies', { waitUntil: 'networkidle2' });
+    // VERIFY
+    await pageA.goto(`http://localhost:${PORT}/show-cookies`, { waitUntil: 'networkidle2' });
+    await pageB.goto(`http://localhost:${PORT}/show-cookies`, { waitUntil: 'networkidle2' });
 
     const cookiesSeenByA = await pageA.evaluate(() => document.body.innerText);
     const cookiesSeenByB = await pageB.evaluate(() => document.body.innerText);
-
     console.log('[RESULT] Session A sees:', cookiesSeenByA);
     console.log('[RESULT] Session B sees:', cookiesSeenByB);
 
-    // Screenshot proof for each isolated session
     await pageA.screenshot({ path: 'proof-session-A.png' });
     await pageB.screenshot({ path: 'proof-session-B.png' });
-    console.log('[INFO] Screenshots saved: proof-session-A.png, proof-session-B.png');
+    console.log('[INFO] Screenshots saved.');
 
-    // Cleanup contexts individually
     await contextA.close();
     await contextB.close();
     console.log('[INFO] Both contexts closed.');
-
   } catch (error) {
     console.error('[ERROR] Lab failed:', error.message);
   } finally {
-    if (browser) {
-      await browser.close();
-      console.log('[INFO] Browser closed cleanly.');
-    }
+    if (browser) { await browser.close(); console.log('[INFO] Browser closed cleanly.'); }
+    if (server) { server.close(); console.log('[INFO] Local server stopped.'); }
   }
 })();
