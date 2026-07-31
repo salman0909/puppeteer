@@ -1,4 +1,13 @@
 const puppeteer = require('puppeteer');
+// Toggle this to false for local visual debugging, true for production runs
+const HEADLESS_MODE = true;
+
+// Detect if running in a container/CI environment as root — common cause of
+// sandbox launch failures. Adjust this check based on your actual CI setup.
+const RUNNING_AS_ROOT_CONTAINER =
+  process.env.CI === 'true' ||
+  process.env.DOCKER_CONTAINER === 'true' ||
+  (typeof process.getuid === 'function' && process.getuid() === 0);
 
 (async () => {
   let browser;
