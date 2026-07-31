@@ -1,9 +1,7 @@
 const puppeteer = require('puppeteer');
-// Toggle this to false for local visual debugging, true for production runs
-const HEADLESS_MODE = true;
 
-// Detect if running in a container/CI environment as root — common cause of
-// sandbox launch failures. Adjust this check based on your actual CI setup.
+const HEADLESS_MODE = false;
+
 const RUNNING_AS_ROOT_CONTAINER =
   process.env.CI === 'true' ||
   process.env.DOCKER_CONTAINER === 'true' ||
@@ -15,10 +13,16 @@ const RUNNING_AS_ROOT_CONTAINER =
   try {
     console.log('[INFO] Launching browser session...');
 
+    const launchArgs = ['--start-maximized'];
+    if (RUNNING_AS_ROOT_CONTAINER) {
+      console.log('[INFO] Root/container environment detected — adding --no-sandbox flag.');
+      launchArgs.push('--no-sandbox', '--disable-setuid-sandbox');
+    }
+
     browser = await puppeteer.launch({
-      headless: false,        // visible window for this demo
-      defaultViewport: null,  // use full window size instead of fixed viewport
-      args: ['--start-maximized']
+      headless: HEADLESS_MODE,
+      defaultViewport: null,
+      args: launchArgs
     });
 
     console.log('[INFO] Browser launched. Version:', await browser.version());
@@ -26,7 +30,6 @@ const RUNNING_AS_ROOT_CONTAINER =
     const page = await browser.newPage();
     console.log('[INFO] New page/tab created.');
 
-    // Navigate and wait until network is idle (page fully loaded)
     await page.goto('https://example.com', {
       waitUntil: 'networkidle2',
       timeout: 30000
@@ -35,7 +38,6 @@ const RUNNING_AS_ROOT_CONTAINER =
     const title = await page.title();
     console.log('[INFO] Page loaded. Title captured:', title);
 
-    // Proof-of-execution screenshot
     await page.screenshot({ path: 'proof-session-loaded.png' });
     console.log('[INFO] Screenshot saved as proof-session-loaded.png');
 
