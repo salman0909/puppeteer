@@ -1,7 +1,7 @@
 const puppeteer = require('puppeteer');
 const http = require('http');
 
-const HEADLESS_MODE = true;
+const HEADLESS_MODE = false;
 const RUNNING_AS_ROOT_CONTAINER =
   process.env.CI === 'true' ||
   process.env.DOCKER_CONTAINER === 'true' ||
