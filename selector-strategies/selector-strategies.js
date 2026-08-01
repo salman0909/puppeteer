@@ -41,6 +41,10 @@ const RUNNING_AS_ROOT_CONTAINER =
       { timeout: 5000 }
     );
 
+    // --- PROOF: capture BEFORE state (3 buttons) ---
+    await page.screenshot({ path: 'proof-before-delete.png' });
+    console.log('[INFO] Screenshot saved: proof-before-delete.png (3 buttons present)');
+
     // === TEST 1: CSS class selector — proves ambiguity exists ===
     console.log('\n[TEST 1] Query using class selector .added-manually');
     const allByClass = await page.$$('.added-manually');
@@ -78,8 +82,9 @@ const RUNNING_AS_ROOT_CONTAINER =
     const after = await page.$$('.added-manually');
     console.log(`[RESULT] After deletion: ${after.length} buttons remain`);
 
-    await page.screenshot({ path: 'proof-selector-strategies.png' });
-    console.log('[INFO] Screenshot saved: proof-selector-strategies.png');
+    // --- PROOF: capture AFTER state (2 buttons) ---
+    await page.screenshot({ path: 'proof-after-delete.png' });
+    console.log('[INFO] Screenshot saved: proof-after-delete.png (2 buttons remain)');
 
   } catch (error) {
     console.error('[ERROR] Lab failed:', error.message);
